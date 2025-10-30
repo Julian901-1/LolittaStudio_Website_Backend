@@ -19,7 +19,16 @@ db.defaults({ submissions: [], admin: { username: 'admin', password: bcrypt.hash
   .write();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: [
+        'https://julian901-1.github.io',
+        'https://lolittamarulina.ru',
+        'https://www.lolittamarulina.ru',
+        'http://localhost:3000',
+        'http://127.0.0.1:5500'
+    ],
+    credentials: true
+}));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(session({
