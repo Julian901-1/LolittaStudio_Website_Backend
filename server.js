@@ -38,8 +38,7 @@ app.use(session({
   cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24 hours
 }));
 
-// Serve static files from parent directory
-app.use(express.static(path.join(__dirname, '..')));
+// Note: Static files are served from GitHub Pages, not from this backend
 
 // Authentication middleware
 function isAuthenticated(req, res, next) {
@@ -50,6 +49,15 @@ function isAuthenticated(req, res, next) {
 }
 
 // API Routes
+
+// Health check / Ping endpoint (для Google Apps Script heartbeat)
+app.get('/ping', (req, res) => {
+  res.json({
+    success: true,
+    timestamp: new Date().toISOString(),
+    message: 'Server is alive'
+  });
+});
 
 // Submit form
 app.post('/api/submissions', (req, res) => {
@@ -129,9 +137,18 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin.html'));
 });
 
-// Serve main site
+// Root endpoint - redirect to GitHub Pages
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'index.html'));
+  res.json({
+    message: 'LolittaStudio Backend API',
+    endpoints: {
+      ping: '/ping',
+      submissions: '/api/submissions',
+      admin: '/admin',
+      adminLogin: '/api/admin/login'
+    },
+    website: 'https://julian901-1.github.io/LolittaStudio_Website/'
+  });
 });
 
 // Start server
