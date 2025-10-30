@@ -18,6 +18,21 @@ const db = low(adapter);
 db.defaults({ submissions: [], admin: { username: 'admin', password: bcrypt.hashSync('Lysykh12', 10) } })
   .write();
 
+// Custom MemoryStore without warning
+// Для маленького проекта MemoryStore - это нормально
+const MemoryStore = session.MemoryStore;
+class SilentMemoryStore extends MemoryStore {
+  constructor() {
+    super();
+    // Отключаем предупреждение
+    this.emit = function(event) {
+      if (event !== 'disconnect') {
+        MemoryStore.prototype.emit.apply(this, arguments);
+      }
+    };
+  }
+}
+
 // Middleware
 app.use(cors({
     origin: [
@@ -32,6 +47,7 @@ app.use(cors({
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(session({
+  store: new SilentMemoryStore(),
   secret: 'lolittastudio-secret-key-2025',
   resave: false,
   saveUninitialized: false,
