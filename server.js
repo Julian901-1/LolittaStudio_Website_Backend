@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const path = require('path');
 const low = require('lowdb');
 const FileSync = require('lowdb/adapters/FileSync');
+const TelegramNotifier = require('./telegramBot');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,8 +16,11 @@ const adapter = new FileSync('db.json');
 const db = low(adapter);
 
 // Initialize database with default values
-db.defaults({ submissions: [], admin: { username: 'admin', password: bcrypt.hashSync('Lysykh12', 10) } })
-  .write();
+db.defaults({
+  submissions: [],
+  telegramUsers: [],
+  admin: { username: 'admin', password: bcrypt.hashSync('Lysykh12', 10) }
+}).write();
 
 // Custom MemoryStore without warning
 // Для маленького проекта MemoryStore - это нормально
@@ -56,6 +60,77 @@ app.use(session({
 
 // Note: Static files are served from GitHub Pages, not from this backend
 
+// Initialize Telegram Bot
+const telegramNotifier = new TelegramNotifier(db);
+
+// Logging helper functions
+function logSubmission(submission) {
+  const timestamp = new Date(submission.timestamp).toLocaleString('ru-RU');
+  const isFullForm = submission.complexity && submission.window_size;
+
+  console.log('\n' + '='.repeat(60));
+  console.log('📨 НОВАЯ ЗАЯВКА');
+  console.log('='.repeat(60));
+  console.log(`⏰ Время: ${timestamp}`);
+  console.log('-'.repeat(60));
+
+  if (isFullForm) {
+    // Полная форма
+    console.log('📋 ТИП: Полная заявка\n');
+
+    const complexityLabels = {
+      'low': 'Низкая сложность (контур без заливок)',
+      'medium': 'Средняя сложность (с заливкой, одна сторона)',
+      'high': 'Высокая сложность (с заливкой, обе стороны)'
+    };
+    console.log(`🎨 Сложность: ${complexityLabels[submission.complexity] || submission.complexity}`);
+
+    const sizeLabels = {
+      'small': 'До 2 кв.м',
+      'medium': '2-5 кв.м',
+      'large': '5-10 кв.м',
+      'xlarge': 'Более 10 кв.м'
+    };
+    console.log(`📐 Размер окна: ${sizeLabels[submission.window_size] || submission.window_size}`);
+
+    const locationLabels = {
+      'moscow': 'Москва',
+      'mo': 'Московская область'
+    };
+    console.log(`📍 Местоположение: ${locationLabels[submission.location] || submission.location}`);
+
+    const designLabels = {
+      'yes': 'Есть готовый эскиз',
+      'idea': 'Есть идея, нужна помощь',
+      'no': 'Нужна разработка с нуля'
+    };
+    console.log(`🎨 Дизайн: ${designLabels[submission.design] || submission.design}`);
+
+    const timingLabels = {
+      'urgent': 'Как можно скорее',
+      'week': 'В течение недели',
+      'month': 'В течение месяца',
+      'flexible': 'Сроки гибкие'
+    };
+    console.log(`⏳ Сроки: ${timingLabels[submission.timing] || submission.timing}`);
+    console.log('-'.repeat(60));
+  } else {
+    // Короткая форма
+    console.log('📋 ТИП: Быстрая заявка');
+    console.log('-'.repeat(60));
+  }
+
+  // Контактные данные
+  console.log(`👤 ИМЯ: ${submission.name || 'Не указано'}`);
+  console.log(`📱 ТЕЛЕФОН: ${submission.phone || 'Не указан'}`);
+
+  if (submission.comment) {
+    console.log(`💬 Комментарий: ${submission.comment}`);
+  }
+
+  console.log('='.repeat(60) + '\n');
+}
+
 // Authentication middleware
 function isAuthenticated(req, res, next) {
   if (req.session && req.session.authenticated) {
@@ -76,7 +151,7 @@ app.get('/ping', (req, res) => {
 });
 
 // Submit form
-app.post('/api/submissions', (req, res) => {
+app.post('/api/submissions', async (req, res) => {
   try {
     const submission = {
       id: Date.now(),
@@ -87,6 +162,14 @@ app.post('/api/submissions', (req, res) => {
     db.get('submissions')
       .push(submission)
       .write();
+
+    // Логирование заявки в консоль
+    logSubmission(submission);
+
+    // Отправка уведомления в Telegram
+    telegramNotifier.notifyNewSubmission(submission).catch(error => {
+      console.error('[Telegram] Ошибка при отправке уведомления:', error.message);
+    });
 
     res.json({ success: true, message: 'Submission received', id: submission.id });
   } catch (error) {
